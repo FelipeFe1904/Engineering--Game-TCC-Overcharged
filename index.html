@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overcharged: Circuit Chaos</title>
+  <style>
+    body {
+      background: #222;
+      color: #fff;
+      margin: 0;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background: #333;
+      border: 2px solid #555;
+    }
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 18px;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px;
+      border-radius: 8px;
+    }
+    #popup {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #111;
+      border: 3px solid #0f0;
+      border-radius: 12px;
+      padding: 30px;
+      text-align: center;
+      display: none;
+      box-shadow: 0 0 15px #0f0;
+    }
+    #popup button, #popup input {
+      margin-top: 10px;
+      padding: 8px 15px;
+      border-radius: 6px;
+      border: none;
+      font-weight: bold;
+    }
+    #popup input {
+      width: 120px;
+      text-align: center;
+    }
+    #popup button {
+      background: #0f0;
+      cursor: pointer;
+    }
+    #popup button:hover {
+      background: #7f7;
+    }
+    #explosion {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle, rgba(255,0,0,0.8) 0%, rgba(0,0,0,0.9) 70%);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 50px;
+      color: yellow;
+      text-shadow: 0 0 20px red;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">Collect all 3 components (Jumper, Breadboard, Arduino) → Assemble on the desk → Solve the calculation!</div>
+
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+  <!-- Calculation Popup -->
+  <div id="popup">
+    <h2>⚡ Circuit Calculation ⚡</h2>
+    <p id="calc"></p>
+    <input id="answer" placeholder="Your answer">
+    <br>
+    <button onclick="checkAnswer()">Confirm</button>
+  </div>
+
+  <!-- Explosion Screen -->
+  <div id="explosion">💥 BOOM! 💥</div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // ===================================================
+    // 🔧 IMAGE CONFIG
+    // ===================================================
+    const IMAGES = {
+      player: "macacoeng.png",
+      jumperBox: "jumper.png",
+      arduinoBox: "arduino.png",
+      protoBox: "protoboard.jpg",
+      table: "mesa madeira.jpg",
+      delivery: "PUT_DELIVERY_IMAGE_URL_HERE.png"
+    };
+
+    function loadImage(url, fallbackColor) {
+      const img = new Image();
+      img.src = url;
+      img.onerror = () => { img.loaded = false; };
+      img.onload = () => { img.loaded = true; };
+      img.fallbackColor = fallbackColor;
+      return img;
+    }
+
+    const playerImg = loadImage(IMAGES.player, "#00f");
+    const jumperImg = loadImage(IMAGES.jumperBox, "#ff0");
+    const arduinoImg = loadImage(IMAGES.arduinoBox, "#0f0");
+    const protoImg = loadImage(IMAGES.protoBox, "#f0f");
+    const tableImg = loadImage(IMAGES.table, "#888");
+    const deliveryImg = loadImage(IMAGES.delivery, "#f00");
+
+
+    // ===================================================
+    // GAME VARIABLES
+    // ===================================================
+    let player = { x: 400, y: 300, size: 40, speed: 4, holding: null, assembled: false, delivered: false };
+
+    const stations = [
+      { x: 100, y: 100, type: 'jumper', label: 'Jumper Box', img: jumperImg },
+      { x: 600, y: 100, type: 'arduino', label: 'Arduino Box', img: arduinoImg },
+      { x: 100, y: 400, type: 'breadboard', label: 'Breadboard Box', img: protoImg }
+    ];
+
+    const table = { x: 400, y: 400, w: 100, h: 60, has: [], img: tableImg };
+    const delivery = { x: 700, y: 500, w: 80, h: 80, img: deliveryImg };
+
+    const keys = {};
+    document.addEventListener('keydown', e => keys[e.key] = true);
+    document.addEventListener('keyup', e => keys[e.key] = false);
+
+    let currentAnswer = 0;
+    let popupVisible = false;
+
+    // ===================================================
+    // MAIN FUNCTIONS
+    // ===================================================
+    function movePlayer() {
+      if (popupVisible) return;
+      if (keys['ArrowUp'] || keys['w']) player.y -= player.speed;
+      if (keys['ArrowDown'] || keys['s']) player.y += player.speed;
+      if (keys['ArrowLeft'] || keys['a']) player.x -= player.speed;
+      if (keys['ArrowRight'] || keys['d']) player.x += player.speed;
+      player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
+      player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
+    }
+
+    function drawImageOrBox(img, x, y, w, h) {
+      if (img.loaded) ctx.drawImage(img, x, y, w, h);
+      else {
+        ctx.fillStyle = img.fallbackColor;
+        ctx.fillRect(x, y, w, h);
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#fff";
+      stations.forEach(s => {
+        drawImageOrBox(s.img, s.x, s.y, 60, 60);
+        ctx.fillText(s.label, s.x - 10, s.y + 75);
+      });
+
+      drawImageOrBox(table.img, table.x, table.y, table.w, table.h);
+      ctx.fillText('Work Bench', table.x + 5, table.y + table.h + 15);
+
+      drawImageOrBox(delivery.img, delivery.x, delivery.y, delivery.w, delivery.h);
+      ctx.fillText('Delivery', delivery.x, delivery.y + delivery.h + 15);
+
+      drawImageOrBox(playerImg, player.x, player.y, player.size, player.size);
+
+      if (player.holding) {
+        ctx.fillStyle = 'yellow';
+        ctx.fillText('Holding: ' + player.holding, player.x - 20, player.y - 10);
+      }
+
+      if (player.assembled) {
+        ctx.fillStyle = 'lime';
+        ctx.fillText('Solve the calculation to continue!', 260, 50);
+      }
+    }
+
+    function checkInteractions() {
+      if (popupVisible) return;
+      if (keys[' ']) {
+        for (let s of stations) {
+          if (Math.abs(player.x - s.x) < 50 && Math.abs(player.y - s.y) < 50 && !player.holding) {
+            player.holding = s.type;
+          }
+        }
+
+        if (Math.abs(player.x - table.x) < 80 && Math.abs(player.y - table.y) < 80) {
+          if (player.holding) {
+            if (!table.has.includes(player.holding)) table.has.push(player.holding);
+            player.holding = null;
+          }
+
+          if (table.has.length === 3 && !player.assembled) {
+            player.assembled = true;
+            showPopup();
+          }
+        }
+
+        if (player.assembled && Math.abs(player.x - delivery.x) < 80 && Math.abs(player.y - delivery.y) < 80 && !player.delivered) {
+          alert('✅ Circuit delivered successfully!');
+          table.has = [];
+          player.assembled = false;
+          player.delivered = true;
+          setTimeout(() => player.delivered = false, 2000);
+        }
+      }
+    }
+
+    function showPopup() {
+      popupVisible = true;
+      const popup = document.getElementById('popup');
+      const calcText = document.getElementById('calc');
+      const answerInput = document.getElementById('answer');
+      popup.style.display = 'block';
+      answerInput.value = '';
+      answerInput.focus();
+
+      const mode = Math.floor(Math.random() * 3);
+      let V, I, R;
+      switch (mode) {
+        case 0:
+          I = (Math.random() * 5 + 1).toFixed(2);
+          R = (Math.random() * 200 + 50).toFixed(2);
+          currentAnswer = (I * R).toFixed(2);
+          calcText.innerHTML = `V = R × I<br>R = ${R}Ω, I = ${I}A<br><br>What is the voltage (V)?`;
+          break;
+        case 1:
+          V = (Math.random() * 12 + 3).toFixed(2);
+          R = (Math.random() * 300 + 100).toFixed(2);
+          currentAnswer = (V / R).toFixed(2);
+          calcText.innerHTML = `I = V ÷ R<br>V = ${V}V, R = ${R}Ω<br><br>What is the current (I)?`;
+          break;
+        case 2:
+          V = (Math.random() * 15 + 5).toFixed(2);
+          I = (Math.random() * 3 + 0.5).toFixed(2);
+          currentAnswer = (V / I).toFixed(2);
+          calcText.innerHTML = `R = V ÷ I<br>V = ${V}V, I = ${I}A<br><br>What is the resistance (R)?`;
+          break;
+      }
+    }
+
+    function checkAnswer() {
+      const userInput = parseFloat(document.getElementById('answer').value.replace(',', '.')).toFixed(2);
+      const popup = document.getElementById('popup');
+      if (userInput === currentAnswer) {
+        popup.style.display = 'none';
+        popupVisible = false;
+        alert('✅ Correct! Circuit ready for delivery!');
+      } else {
+        popup.style.display = 'none';
+        explode();
+      }
+    }
+
+    function explode() {
+      const exp = document.getElementById('explosion');
+      exp.style.display = 'flex';
+      popupVisible = true;
+      table.has = [];
+      player.holding = null;
+      player.assembled = false;
+
+      setTimeout(() => {
+        exp.style.display = 'none';
+        popupVisible = false;
+      }, 2000);
+    }
+
+    function gameLoop() {
+      movePlayer();
+      checkInteractions();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
