@@ -4,11 +4,6 @@ O objetivo é tornar conteúdos de Engenharia mais dinâmicos e acessíveis atra
 
 ---
 
-## 🎮 Demonstração
-(Adicione aqui prints ou GIFs do jogo quando quiser)
-
----
-
 ## 🧩 Como funciona o jogo
 O jogador controla um personagem em um pequeno cenário.  
 A mecânica principal funciona assim:
